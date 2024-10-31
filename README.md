@@ -6,7 +6,7 @@
 
 As the availability of healthcare data in [FHIR format](https://hl7.org/fhir) increases, there is a growing interest in using this data for analytic purposes. Most analytic and machine learning use cases require the preparation of FHIR data using transformations and tabular projections from its original, deeply nested form and authoring and maintaining these transformations is not trivial. The [SQL-on-FHIR](https://sql-on-fhir.org) specification defines a compact language to describe these transformations called a [FHIR ViewDefinition](https://sql-on-fhir.org/ig/latest/StructureDefinition-ViewDefinition.html).
 
-FlatQuack is an open source tool that compiles these ViewDefinitions into SQL that can be executed with [DuckDB](https://duckdb.org). DuckDB is a lightweight, scalable, open source database engine that runs at blazing speed thanks to its columnar engine, which supports parallel execution and can process larger-than-memory workloads. DuckDB natively supports reading and writing data in common formats like JSON, Parquet and CSV and can even integrate directly with remote endpoints such as AWS S3 buckets and databases such as Postgres, MySql and SQLite. FlatQuack takes advantage of this capability with the ability to specify templates that shape the SQL produced by FlatQuack to different use cases, making it easy to adapt to the specific naming conventions, input file formats, and output file formats in your workflow. Since FlatQuack just outputs SQL, it can be run directly on a FHIR dataset for a specific project or integrated into an existing data pipeline that uses orchestration and transformation tools like [Apache Airflow](https://airflow.apache.org/) and [dbt](https://getdbt.com).  
+FlatQuack is an open source tool that compiles these ViewDefinitions into SQL that can be executed with [DuckDB](https://duckdb.org). DuckDB is a lightweight, scalable, open source database engine that runs at blazing speed thanks to its columnar engine, which supports parallel execution and can process larger-than-memory workloads. DuckDB natively supports reading and writing data in common formats like JSON, Parquet and CSV and can even integrate directly with remote endpoints such as AWS S3 buckets and databases such as Postgres, MySql and SQLite. FlatQuack takes advantage of this capability with the ability to specify templates that shape the SQL produced by FlatQuack to different use cases, making it easy to adapt to the specific naming conventions, input file formats, and output file formats in your workflow. Since FlatQuack just outputs SQL, it can be run directly on a FHIR dataset for a specific project or integrated into an existing data pipeline that uses orchestration and transformation tools like [Apache Airflow](https://airflow.apache.org/) and [dbt](https://getdbt.com).
 
 ## Alpha Version
 
@@ -20,11 +20,22 @@ FlatQuack is alpha software - it is not complete and you may run into bugs when 
 Additional steps if you would like to run scripts, unit tests or edit the project's source code:
 
 3. Clone this repository and switch to that directory
-4. Run the `bun install` command to install FlatQuack dependencies 
+4. Run the `bun install` command to install FlatQuack dependencies
+
+You can also run it using Docker container:
+
+```sh
+docker build -t flatquack .
+docker run --rm  -v "$(pwd):/app" -it flatquack
+
+root@<container_hash>:/app# bunx flatquack
+# *** compiling example/example.vd.json ***
+# ... rest of output ...
+```
 
 ## Running FlatQuack
 
-#### `bunx flatquack` 
+#### `bunx flatquack`
 
 (or `bun run ./src/cli.js` if you installed FlatQuack locally using steps 3 and 4 above)
 
@@ -37,7 +48,7 @@ Additional steps if you would like to run scripts, unit tests or edit the projec
 | `--view-pattern` | `-p` |  `**/*.vd.json` | [Glob pattern](https://bun.sh/docs/api/glob) to define which files are ViewDefinitions. |
 | `--template` | `-t` | `@csv` | Path to [template](#templates---template-parameter) to use when generating SQL. May be the name of a [sample template](#sample-templates) or the path to a [custom template](#custom-templates) |
 | `--schema-file` | `-s` | FHIR R4 Schema | Path to a FHIR schema generated using the script included at `./scripts/build-fhir-schema.js`. This can be used to execute ViewDefinitions against FHIR data from versions other than R4.  See the [Generating a FHIR Schema](#generating-a-fhir-schema) seciton below for details.|
-| `--param` | | | `name=value` pair of user defined variables to be used when generating SQL with a [custom template](#custom-templates). This argument may be repeated. | 
+| `--param` | | | `name=value` pair of user defined variables to be used when generating SQL with a [custom template](#custom-templates). This argument may be repeated. |
 | `--verbose` | | false | Print debugging information to the console when running FlatQuack. |
 
 #### Modes (--mode parameter)
@@ -45,7 +56,7 @@ Additional steps if you would like to run scripts, unit tests or edit the projec
 | --- |  --- |
 | `preview` (default) | Generate SQL and display it in the console. |
 | `build` | Generate SQL and save it in the same directory as the source ViewDefinition. |
-| `run` | Execute the SQL and print the time it took to run in the console. | 
+| `run` | Execute the SQL and print the time it took to run in the console. |
 | `explore` | Execute the SQL and print the query output in the console as JSON. Large queries should use the `build` action and run the resulting SQL files [directly with DuckDB](https://duckdb.org/docs/api/cli/overview#non-interactive-usage). |
 
 
@@ -88,12 +99,12 @@ To generate a schema:
     bun ./scripts/build-fhir-schema.js {path to FHIR definitions} {output file path}
     ```
 The script accepts two positional parameters:
-- The path to the directory where the FHIR definition files in JSON format are located (e.g., `../fhir/R4`) 
+- The path to the directory where the FHIR definition files in JSON format are located (e.g., `../fhir/R4`)
 - The path for the schema file (e.g. `../schemas/fhir-schema-r4.json`)
 
 ## Roadmap
 
-- [ ] Value Set support 
+- [ ] Value Set support
 - [ ] Unions with nested select elements
 - [ ] Constants in ViewDefinitions
 - [ ] Boundary functions in FHIR Path expressions
