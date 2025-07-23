@@ -57,7 +57,7 @@ describe("fhirpath to duckdb sql schemas", () => {
 		const decimalSchema = {"Custom.valueDecimal": {t: "decimal"}}
 		const fp = "valueDecimal";
 		const schema = buildSchemaSubset(fp, "Custom", decimalSchema);
-		const target = "{valueDecimal: 'DECIMAL'}";
+		const target = "{valueDecimal: 'DOUBLE'}";
 		expect(schema.replace(/\s*/g, "")).toEqual(target.replace(/\s*/g, ""));
 	});
 
@@ -72,7 +72,7 @@ describe("fhirpath to duckdb sql schemas", () => {
 	test("struct", async () => {
 		const fp = "valueQuantity.value";
 		const schema = buildSchemaSubset(fp, "Observation", fhirSchema);
-		const target = "{valueQuantity: 'STRUCT(value DECIMAL)'}";
+		const target = "{valueQuantity: 'STRUCT(value DOUBLE)'}";
 		expect(schema.replace(/\s*/g, "")).toEqual(target.replace(/\s*/g, ""));	
 	})
 

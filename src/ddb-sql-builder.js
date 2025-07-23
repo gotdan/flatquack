@@ -264,7 +264,9 @@ export function pathsToSchema(node, isInRoot=true) {
 	if (!node.fhirType) console.log(`${JSON.stringify(node)} is of an unknown type`)
 	if (node.children.length) {
 		sqlType = `STRUCT(${node.children.map(c => pathsToSchema(c, false)).join(", ")})${arrayIndicator}`
-	} else if (["decimal", "boolean", "integer"].indexOf(node.fhirType) > -1) {
+	} else if (node.fhirType == "decimal") {
+		sqlType = `DOUBLE${arrayIndicator}`;
+	} else if (["boolean", "integer"].indexOf(node.fhirType) > -1) {
 		sqlType = `${node.fhirType.toUpperCase()}${arrayIndicator}`;
 	} else if (node.fhirType && node.fhirType[0] != node.fhirType[0].toUpperCase()) {
 		sqlType = `VARCHAR${arrayIndicator}`;
