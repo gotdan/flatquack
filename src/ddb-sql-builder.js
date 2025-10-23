@@ -234,14 +234,17 @@ export function astToSql(node, inLambda, inputType={}) {
 				case '_unionAll':
 					const unions = node.args.map(a => {
 						const flat = flattenSql(astToSql(a, inLambda, inputType));
+						const arraySql = flat.outputType.isArray
+							? `coalesce(${flat.sql}, [])`
+							: `[${flat.sql}]`;
 						return {
-							sql: flat.outputType.isArray ? flat.sql : `[${flat.sql}]`,
-							outputType: flat.outputType
+							sql: arraySql,
+							outputType: {...flat.outputType, isArray: true}
 						}
 					});
 					return {
 						sql: unions.map(u => u.sql).join(" || "), 
-						outputType: {...unions[0].outputType, isArray: true}
+						outputType: unions.length ? unions[0].outputType : {isArray: true}
 					};
 
 				default:

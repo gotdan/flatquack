@@ -87,6 +87,18 @@ const unionPatient = {
 	}]
 }
 
+const contactOnlyPatient = {
+	resourceType: "Patient",
+	id: "pt-missing-telecom",
+	contact: [{
+		telecom: [{
+			value: "c1",
+			system: "sms"
+		}]
+	}]
+
+}
+
 describe("custom fhirpath features to duckdb sql", () => {
 
 	test("multiple columns", async () => {
@@ -141,6 +153,22 @@ describe("custom fhirpath features to duckdb sql", () => {
 		const target = {id: "123", zip: ["z1", "z2"]};
 		const query = buildQuery(fp, resource.resourceType, fhirSchema);
 		const result = await testQuery(query, resource);
+		expect(result).toEqual(target);
+	});
+
+	test("_unionAll preserves right-hand results when left side is null", async () => {
+		const fp = "_forEach(_col('id', id), _col_collection('unioned', _unionAll(telecom._forEach(_col('tel', value), _col('sys', system)), contact.telecom._forEach(_col('tel', value), _col('sys', system)))))";
+		const resource = contactOnlyPatient;
+		const target = {
+			id: "pt-missing-telecom",
+			unioned: [{
+				tel: "c1",
+				sys: "sms"
+			}]
+		};
+		const duckSchema = "{ id: 'VARCHAR', telecom: 'STRUCT(value VARCHAR, system VARCHAR)[]', contact: 'STRUCT(telecom STRUCT(value VARCHAR, system VARCHAR)[])[]', resourceType: 'VARCHAR' }";
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource, duckSchema);
 		expect(result).toEqual(target);
 	});
 
