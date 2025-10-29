@@ -1,16 +1,16 @@
 import fhirpath from "fhirpath";
 
-export function fhirpathToAst(path, resourceType, schema) {
+export function fhirpathToAst(path, resourceType, schema, vars) {
 	const parsedPath = fhirpath.parse(path);
-	return simplifyFhirPath(parsedPath, {schemaPath: resourceType}, schema);
+	return simplifyFhirPath(parsedPath, {schemaPath: resourceType}, schema, vars || {});
 }
 
-function simplifyFhirPath(node, type = null, schema = {}) {
+function simplifyFhirPath(node, type = null, schema = {}, vars = {}) {
 
 	switch (node.type) {
 		case undefined:
 		case 'EntireExpression':
-			const exprNodes = simplifyFhirPath(node.children[0], type, schema);
+			const exprNodes = simplifyFhirPath(node.children[0], type, schema, vars);
 			return {
 				segmentType: "expr",
 				children: Array.isArray(exprNodes) ? exprNodes : [exprNodes],
@@ -18,7 +18,7 @@ function simplifyFhirPath(node, type = null, schema = {}) {
 			}
 
 		case 'ParenthesizedTerm':
-			const parenNodes = simplifyFhirPath(node.children[0], type, schema);
+			const parenNodes = simplifyFhirPath(node.children[0], type, schema, vars);
 			return [{
 				segmentType: "paren",
 				children: Array.isArray(parenNodes) ? parenNodes : [parenNodes],
@@ -32,7 +32,7 @@ function simplifyFhirPath(node, type = null, schema = {}) {
 		case 'OrExpression':
 		case 'InequalityExpression':
 		case 'EqualityExpression':
-			const components = node.children.map(c => simplifyFhirPath(c, type, schema));
+			const components = node.children.map(c => simplifyFhirPath(c, type, schema, vars));
 			const exprFhirType = /Add|Sub|Mult/.test(node.type) ? "number" : "boolean"
 			const isComparison = /Inequality|Equality/.test(node.type);
 			return [{
@@ -46,8 +46,8 @@ function simplifyFhirPath(node, type = null, schema = {}) {
 		case 'IndexerExpression':
 			if (node.terminalNodeText[0] == '.' || node.terminalNodeText[0] == '[') {
 
-				let beforeNavigation = simplifyFhirPath(node.children[0], type, schema)
-				let navigationNode = simplifyFhirPath(node.children[1], beforeNavigation.at(-1).type, schema)
+				let beforeNavigation = simplifyFhirPath(node.children[0], type, schema, vars)
+				let navigationNode = simplifyFhirPath(node.children[1], beforeNavigation.at(-1).type, schema, vars)
 
 				//redo last navigation value and schema in the context of ofType param
 				//this is a bit hacky
@@ -79,7 +79,7 @@ function simplifyFhirPath(node, type = null, schema = {}) {
 		case 'InvocationTerm':
 		case 'MemberInvocation':
 			if (node.children.length === 1)
-				return simplifyFhirPath(node.children[0], type, schema);
+				return simplifyFhirPath(node.children[0], type, schema, vars);
 
 		case 'Identifier':
 			const nodeText = node.terminalNodeText[0];
@@ -89,7 +89,7 @@ function simplifyFhirPath(node, type = null, schema = {}) {
 		case 'FunctionInvocation':
 			const functionName = node.children[0].children[0].terminalNodeText[0];
 			const args = (node.children[0].children[1]?.children || []).map((param) => {
-				return simplifyFhirPath(param, type, schema)
+				return simplifyFhirPath(param, type, schema, vars)
 			});
 
 			let outputType;
@@ -195,6 +195,24 @@ function simplifyFhirPath(node, type = null, schema = {}) {
 				}];
 			}
 
+		case 'ExternalConstantTerm':
+			return simplifyFhirPath(node.children[0], type, schema, vars);
+
+		case 'ExternalConstant':
+			const varName = node.children[0].terminalNodeText[0].replace(/`/g, '');
+			const varValue = vars[varName];
+			
+			if (varValue === undefined) {
+				throw new Error(`Variable %${varName} is not defined. Use --var ${varName}=value to define it.`);
+			}
+			
+			const literalType = inferType(varValue);
+			return [{
+				segmentType: "literal",
+				value: literalType === 'string' ? `'${varValue}'` : varValue,
+				type: { fhirType: literalType, isArray: false }
+			}];
+
 		case 'PolarityExpression':
 			return [{
 				segmentType: "literal", value: node.text,
@@ -232,4 +250,11 @@ function resolveType(t, s, schema) {
 		fhirType: elementSchema.t,
 		schemaPath
 	}
+}
+
+function inferType(value) {
+	if (value === 'true' || value === 'false') return 'boolean';
+	if (!isNaN(value) && value.trim() !== '') return 'number';
+	if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return 'dateTime';
+	return 'string';
 }

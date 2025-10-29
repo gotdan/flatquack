@@ -103,7 +103,8 @@ const args = parseArgs({
 		"macros": {type: "string", multiple: true},
 		"verbose": {type: "boolean"},
 		"mode": {type: "string", short: "m", default: "preview"},
-		"param": {type: "string", multiple: true}
+		"param": {type: "string", multiple: true},
+		"var": {type: "string", multiple: true}
 	}
 });
 
@@ -121,6 +122,10 @@ const params = args.values["param"]
 	? args.values["param"].map(v => v.split("="))
 	: undefined;
 
+const vars = args.values["var"]
+	? Object.fromEntries(args.values["var"].map(v => v.split("=")))
+	: undefined;
+
 const schema = args.values["schema-file"]
 	? JSON.parse(fs.readFileSync(args.values["schema-file"]))
 	: fhirSchema;
@@ -135,7 +140,7 @@ for (const file of glob.scanSync(args.values["view-path"],{onlyFiles:true})) {
 	const outputPath = path.join(path.dirname(inputPath), basename + ".sql");
 
 	const view = JSON.parse(fs.readFileSync(inputPath));
-	const query = templateToQuery(view, schema, template, params, args.values["verbose"], undefined, customMacros);
+	const query = templateToQuery(view, schema, template, params, args.values["verbose"], undefined, customMacros, vars);
 
 	if (args.values["mode"] == "build") {
 		console.log("*** compiling", inputPath, "=>", outputPath, "***");

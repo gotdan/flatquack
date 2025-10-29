@@ -3,17 +3,17 @@ import {astToSql, pathsToSchema, tablesToSql} from "./ddb-sql-builder.js"
 import {parseVd, extractPathsFromAst} from "./view-parser.js";
 import macros from "../templates/duck-macros.js";
 
-export function buildQuery(vd, schema, filterByResourceType, verbose) {
+export function buildQuery(vd, schema, filterByResourceType, verbose, vars) {
 	const parsedVd = parseVd(vd);
 	if (verbose) console.log(parsedVd.path)
 
-	const fpAst = fhirpathToAst(parsedVd.path, vd.resource, schema);
+	const fpAst = fhirpathToAst(parsedVd.path, vd.resource, schema, vars);
 	const fpSql = astToSql(fpAst).sql;
 
 	const whereAsts = (vd.where||[]).map(w => w.path)
 		.concat([filterByResourceType ? `resourceType = '${vd.resource}'` : null])
 		.filter(w => !!w)
-		.map(w => fhirpathToAst(w, vd.resource, schema));
+		.map(w => fhirpathToAst(w, vd.resource, schema, vars));
 
 	const whereSql = whereAsts.map(w => {
 		const whereSql = astToSql(w);
@@ -29,13 +29,13 @@ export function buildQuery(vd, schema, filterByResourceType, verbose) {
 }
 
 //TODO: consider replacing this with a full template language
-export function templateToQuery(vd, schema, template, args=[], verbose, filterByResourceType, customMacros=null) {
+export function templateToQuery(vd, schema, template, args=[], verbose, filterByResourceType, customMacros=null, vars=null) {
 	//Setting filterByResourceType to btrue can only be used if the schema for the
 	//elements being use is compatible between all of the resources being read
 	//(e.g., element with the same names have the same structure). This is used
 	//in some of the tests that mix resource types.
 	
-	const queryParts = buildQuery(vd, schema, filterByResourceType, verbose);
+	const queryParts = buildQuery(vd, schema, filterByResourceType, verbose, vars);
 	const whereSql = queryParts.whereSql ? "WHERE " + queryParts.whereSql : "";
 	const schemaSql = queryParts.schemaSql ? `, columns=${queryParts.schemaSql}` : "";
 
