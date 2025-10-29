@@ -1,7 +1,8 @@
 .DS_Store
 node_modules
-./data
-./fhir
-./output
+/data
+/fhir
+/output
+/demo
 .vscode
 *.temp.json

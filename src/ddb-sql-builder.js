@@ -247,6 +247,54 @@ export function astToSql(node, inLambda, inputType={}) {
 						outputType: unions.length ? unions[0].outputType : {isArray: true}
 					};
 
+				//non-standard
+				case '_invoke':
+					const macroName = firstArg.value.replace(/^['"]|['"]$/g, ''); // Remove quotes
+					
+					// Validate that all parameters (except the first, which is the macro name) are scalar values
+					// or arrays of scalar values. No paths are allowed.
+					function validateMacroParam(argNodes, paramIndex) {
+						if (!argNodes || argNodes.length === 0) return;
+						
+						for (const node of argNodes) {
+							// Check if it's an expression wrapper
+							if (node.segmentType === 'expr' && node.children) {
+								validateMacroParam(node.children, paramIndex);
+								continue;
+							}
+							
+							// Only literals are allowed as parameters
+							if (node.segmentType !== 'literal') {
+								throw new Error(
+									`_invoke parameter ${paramIndex + 1} must be a scalar literal value (string, number, boolean). ` +
+									`Paths and other expressions are not allowed. Found: ${node.segmentType}`
+								);
+							}
+						}
+					}
+					
+					// Validate all parameters after the macro name
+					node.args.slice(1).forEach((argNodes, index) => {
+						validateMacroParam(argNodes, index);
+					});
+					
+					// Process additional parameters (skip the first arg which is the macro name)
+					const macroParams = node.args.slice(1).map(argNodes => {
+						const argAst = flattenSql(astToSql(argNodes, false, inputType));
+						return argAst.sql;
+					}).join(', ');
+					
+					if (inputType.isArray) {
+						// Macros on array: map over each element
+						sql = `list_transform(el -> el.${macroName}(${macroParams}))`;
+						outputType = {fhirType: inputType.fhirType, isArray: true};
+					} else {
+						// Macros on scalar: call the function directly
+						sql = `${macroName}(${macroParams})`;
+						outputType = {fhirType: inputType.fhirType, isArray: false};
+					}
+					return {sql, outputType};
+
 				default:
 					throw(`function ${JSON.stringify(node)} not handled`)
 			}

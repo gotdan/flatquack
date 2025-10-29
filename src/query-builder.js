@@ -29,8 +29,8 @@ export function buildQuery(vd, schema, filterByResourceType, verbose) {
 }
 
 //TODO: consider replacing this with a full template language
-export function templateToQuery(vd, schema, template, args=[], verbose, filterByResourceType) {
-	//Setting filterByResourceType to true can only be used if the schema for the
+export function templateToQuery(vd, schema, template, args=[], verbose, filterByResourceType, customMacros=null) {
+	//Setting filterByResourceType to btrue can only be used if the schema for the
 	//elements being use is compatible between all of the resources being read
 	//(e.g., element with the same names have the same structure). This is used
 	//in some of the tests that mix resource types.
@@ -38,6 +38,9 @@ export function templateToQuery(vd, schema, template, args=[], verbose, filterBy
 	const queryParts = buildQuery(vd, schema, filterByResourceType, verbose);
 	const whereSql = queryParts.whereSql ? "WHERE " + queryParts.whereSql : "";
 	const schemaSql = queryParts.schemaSql ? `, columns=${queryParts.schemaSql}` : "";
+
+	// Concatenate base macros with custom macros
+	const allMacros = customMacros ? macros + '\n' + customMacros : macros;
 
 	const templateVars = args.concat([
 		["fq_input_dir", process.cwd()],
@@ -49,7 +52,7 @@ export function templateToQuery(vd, schema, template, args=[], verbose, filterBy
 		["fq_sql_flattening_tables", queryParts.outputSql.joinSql],
 		["fq_vd_name", vd.name || "output"],
 		["fq_vd_resource", vd.resource],
-		["fq_sql_macros", macros]
+		["fq_sql_macros", allMacros]
 	]);
 
 	templateVars.forEach( v => {

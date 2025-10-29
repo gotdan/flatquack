@@ -41,7 +41,7 @@ function buildQuery(fp, resourceType, schema) {
 
 const simplePatient = {
 	resourceType: "Patient", 
-	id: "123",
+	id: "id-123",
 	name: [{family: "f1"}],
 	link: [{
         other: {reference: "Patient/456"}
@@ -113,7 +113,7 @@ describe("custom fhirpath features to duckdb sql", () => {
 	test("initial _forEach function", async () => {
 		const fp = "_forEach(_col('id', id), _col('last', name.family))";
 		const resource = simplePatient;
-		const target = {id: "123", last: "f1"}
+		const target = {id: "id-123", last: "f1"}
 		const query = buildQuery(fp, resource.resourceType, fhirSchema);
 		const result = await testQuery(query, resource);
 		expect(result).toEqual(target);
@@ -227,6 +227,116 @@ describe("custom fhirpath features to duckdb sql", () => {
 		const fp = "_forEach(_col('address', address))";
 		const resource = unionPatient;
 		const target = {address: {postalCode: "z1"}};
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toEqual(target);
+	});
+
+});
+
+describe("_invoke function", () => {
+
+	test("_invoke on scalar value", async () => {
+		const fp = "id._invoke('upper')";
+		const resource = simplePatient;
+		const target = "ID-123";
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toBe(target);
+	});
+
+	test("_invoke on array value - maps over each element", async () => {
+		const fp = "name.family._invoke('upper')";
+		const resource = multipleNames;
+		const target = ["F1", "F2"];
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toEqual(target);
+	});
+
+	test("_invoke within _forEach on scalar field", async () => {
+		const fp = "name._forEach(_col('family_upper', family._invoke('upper')))";
+		const resource = multipleNames;
+		const target = [{family_upper: "F1"}, {family_upper: "F2"}];
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toEqual(target);
+	});
+
+	test("_invoke with string parameter", async () => {
+		const fp = "id._invoke('concat', 'suffix')";
+		const resource = simplePatient;
+		const target = "id-123suffix";
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toBe(target);
+	});
+
+	test("_invoke with numeric parameters", async () => {
+		const fp = "id._invoke('substring', 1, 2)";
+		const resource = simplePatient;
+		const target = "id";
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toBe(target);
+	});
+
+	test("_invoke with multiple parameters", async () => {
+		const fp = "id._invoke('replace', '2', 'X')";
+		const resource = simplePatient;
+		const target = "id-1X3";
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toBe(target);
+	});
+
+	test("_invoke with parameters on array value", async () => {
+		const fp = "name.family._invoke('concat', '_suffix')";
+		const resource = multipleNames;
+		const target = ["f1_suffix", "f2_suffix"];
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toEqual(target);
+	});
+
+	test("_invoke should throw error when path is used as parameter", () => {
+		const fp = "name._forEach(_col('concat', family._invoke('concat', use)))";
+		const resource = multipleNames;
+		expect(() => {
+			buildQuery(fp, resource.resourceType, fhirSchema);
+		}).toThrow(/_invoke parameter.*must be a scalar literal value/);
+	});
+
+	test("_invoke should throw error when path is used in any parameter position", () => {
+		const fp = "id._invoke('substring', name.family, 2)";
+		const resource = simplePatient;
+		expect(() => {
+			buildQuery(fp, resource.resourceType, fhirSchema);
+		}).toThrow(/_invoke parameter.*must be a scalar literal value/);
+	});
+
+	test("_invoke inside where() on scalar field", async () => {
+		const fp = "name.where(family._invoke('upper') = 'F1')";
+		const resource = multipleNames;
+		const target = [{use: "official", family: "f1", given: null}];
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toEqual(target);
+	});
+
+	test("_invoke on array before where()", async () => {
+		const fp = "name.family._invoke('upper').where($this = 'F1')";
+		const resource = multipleNames;
+		const target = ["F1"];
+		const query = buildQuery(fp, resource.resourceType, fhirSchema);
+		const result = await testQuery(query, resource);
+		expect(result).toEqual(target);
+	});
+
+	test("_invoke on $this in where", async () => {
+		const fp = "name.family.where($this._invoke('upper') = 'F1')";
+		const resource = multipleNames;
+		const target = ["f1"];
 		const query = buildQuery(fp, resource.resourceType, fhirSchema);
 		const result = await testQuery(query, resource);
 		expect(result).toEqual(target);

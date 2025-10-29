@@ -31,6 +31,61 @@ function exploreQuery(sql) {
 	});
 }
 
+function loadMacros(macroLocations) {
+	if (!macroLocations || macroLocations.length === 0) {
+		return null;
+	}
+
+	const macroContents = [];
+
+	for (let location of macroLocations) {
+		let resolvedPath = location;
+
+		// Handle @-prefixed template macro files
+		if (location.startsWith('@')) {
+			const macroName = location.slice(1);
+			resolvedPath = path.join(import.meta.dir, "../templates", macroName + ".sql");
+			
+			if (!fs.existsSync(resolvedPath)) {
+				console.error(`Error: Template macro file not found: ${macroName} (looked for ${resolvedPath})`);
+				process.exit(1);
+			}
+		}
+
+		const stats = fs.statSync(resolvedPath);
+
+		if (stats.isDirectory()) {
+			// Find all .sql files in the directory
+			const files = fs.readdirSync(resolvedPath)
+				.filter(f => f.endsWith('.sql'))
+				.map(f => path.join(resolvedPath, f));
+
+			if (files.length === 0) {
+				console.error(`Error: Directory ${resolvedPath} does not contain any .sql files`);
+				process.exit(1);
+			}
+
+			for (const file of files) {
+				const content = fs.readFileSync(file, 'utf-8').trim();
+				if (!content.endsWith(';')) {
+					console.error(`Error: Macro file ${file} must end with a semicolon`);
+					process.exit(1);
+				}
+				macroContents.push(content);
+			}
+		} else if (stats.isFile()) {
+			const content = fs.readFileSync(resolvedPath, 'utf-8').trim();
+			if (!content.endsWith(';')) {
+				console.error(`Error: Macro file ${resolvedPath} must end with a semicolon`);
+				process.exit(1);
+			}
+			macroContents.push(content);
+		}
+	}
+
+	return macroContents.join('\n');
+}
+
 
 const args = parseArgs({
 	args: Bun.argv.slice(2),
@@ -45,6 +100,7 @@ const args = parseArgs({
 		},
 		"template": {type: "string", short: "t"},
 		"schema-file": {type: "string", short: "s"},
+		"macros": {type: "string", multiple: true},
 		"verbose": {type: "boolean"},
 		"mode": {type: "string", short: "m", default: "preview"},
 		"param": {type: "string", multiple: true}
@@ -69,6 +125,8 @@ const schema = args.values["schema-file"]
 	? JSON.parse(fs.readFileSync(args.values["schema-file"]))
 	: fhirSchema;
 
+const customMacros = loadMacros(args.values["macros"]);
+
 const glob = new Glob(args.values["view-pattern"]);
 
 for (const file of glob.scanSync(args.values["view-path"],{onlyFiles:true})) {
@@ -77,7 +135,7 @@ for (const file of glob.scanSync(args.values["view-path"],{onlyFiles:true})) {
 	const outputPath = path.join(path.dirname(inputPath), basename + ".sql");
 
 	const view = JSON.parse(fs.readFileSync(inputPath));
-	const query = templateToQuery(view, schema, template, params, args.values["verbose"]);
+	const query = templateToQuery(view, schema, template, params, args.values["verbose"], undefined, customMacros);
 
 	if (args.values["mode"] == "build") {
 		console.log("*** compiling", inputPath, "=>", outputPath, "***");

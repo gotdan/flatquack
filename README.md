@@ -37,6 +37,7 @@ Additional steps if you would like to run scripts, unit tests or edit the projec
 | `--view-pattern` | `-p` |  `**/*.vd.json` | [Glob pattern](https://bun.sh/docs/api/glob) to define which files are ViewDefinitions. |
 | `--template` | `-t` | `@csv` | Path to [template](#templates---template-parameter) to use when generating SQL. May be the name of a [sample template](#sample-templates) or the path to a [custom template](#custom-templates) |
 | `--schema-file` | `-s` | FHIR R4 Schema | Path to a FHIR schema generated using the script included at `./scripts/build-fhir-schema.js`. This can be used to execute ViewDefinitions against FHIR data from versions other than R4.  See the [Generating a FHIR Schema](#generating-a-fhir-schema) seciton below for details.|
+| `--macros` | | | Experimental - Path to file(s) or directory(ies) containing additional SQL macros. Prefix with `@` to reference files in the templates directory. This argument may be repeated. See [details below](#macros---macros-parameter).| 
 | `--param` | | | `name=value` pair of user defined variables to be used when generating SQL with a [custom template](#custom-templates). This argument may be repeated. | 
 | `--verbose` | | false | Print debugging information to the console when running FlatQuack. |
 
@@ -47,8 +48,6 @@ Additional steps if you would like to run scripts, unit tests or edit the projec
 | `build` | Generate SQL and save it in the same directory as the source ViewDefinition. |
 | `run` | Execute the SQL and print the time it took to run in the console. | 
 | `explore` | Execute the SQL and print the query output in the console as JSON. Large queries should use the `build` action and run the resulting SQL files [directly with DuckDB](https://duckdb.org/docs/api/cli/overview#non-interactive-usage). |
-
-
 
 ## Templates (--template parameter)
 
@@ -78,6 +77,53 @@ FlatQuack uses a very simple template language that replaces specific variables 
 | `fq_vd_resource` | The value in the `resource` element of the ViewDefinition |
 | `fq_sql_macros` | DuckDB SQL macros to load before executing a query generated with FlatQuack |
 
+## Macros (--macros parameter)
+As an experimental feature, DuckDB macros or native DuckDB functions that accept and return a scalar value may be used in ViewDefinitions processed with FlatQuack. This feature enables custom data transformations, anonymization, and other scalar processing functions to be applied to FHIR data during flattening.
+
+### Writing Macros
+Macros are written using standard DuckDB SQL syntax and must:
+- Use the `CREATE OR REPLACE MACRO` statement
+- Accept and return scalar values (not tables or complex objects)
+- Be stored in `.sql` files with statements ending in semicolons
+
+Example macro that extracts the year portion of a date string:
+```sql
+CREATE OR REPLACE MACRO anon_date_to_year(date) AS (
+    CASE
+        WHEN date IS NULL OR len(date) < 4 THEN NULL
+        ELSE substring(date, 1, 4)
+    END
+);
+```
+
+See [anonymize.sql](/templates/anonymize.sql) for additional examples of macros for data anonymization.
+
+### Using the `_invoke` FHIRPath Function
+Call macros or native DuckDB functions in ViewDefinition FHIRPath expressions using the `_invoke()` function. The first parameter is the macro or function name (as a string), followed by any parameters the macro requires in addition to the current value of the path which will always be passed in as the first parameter. All parameters must be scalar literal values (strings, numbers, booleans).
+
+Examples:
+```json
+{
+  "column": [{
+    "name": "birthYear",
+    "path": "birthDate._invoke('anon_date_to_year')"
+  }]
+}
+```
+
+The `_invoke` function can be used:
+- On scalar or array values (arrays are mapped over automatically)
+- With multiple parameters: `id._invoke('substring', 1, 2)`
+- Inside `where()` clauses: `address.where(country._invoke('anon_is_usa'))`
+- Within `_forEach` expressions for complex transformations
+
+### Loading Macros via Command Line
+Use the `--macros` parameter to load macro files when running FlatQuack. This parameter accepts:
+- **File paths**: `--macros ./my-macros.sql`
+- **Directory paths**: `--macros ./macros/` (loads all `.sql` files in the directory)
+- **Template references**: `--macros @anonymize` (references `templates/anonymize.sql`)
+- **Multiple sources**: Repeat the parameter to load from multiple locations
+
 ## Generating a FHIR Schema
 The schema for FHIR R4 is included with FlatQuack, but you may want to execute ViewDefinition files against other FHIR versions as well. To do this you can generate schema files for those version and pass them in with the `--schema-file` command line argument.
 
@@ -91,7 +137,7 @@ The script accepts two positional parameters:
 - The path to the directory where the FHIR definition files in JSON format are located (e.g., `../fhir/R4`) 
 - The path for the schema file (e.g. `../schemas/fhir-schema-r4.json`)
 
-## Roadmap
+## Potential Future Development
 
 - [ ] Value Set support 
 - [ ] Unions with nested select elements
