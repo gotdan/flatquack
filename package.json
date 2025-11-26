@@ -5,6 +5,7 @@
 	"homepage": "https://flatquack.org",
 	"dependencies": {
 		"duckdb": "^1.4.1",
-		"fhirpath": "^3.10.5"
+		"fhirpath": "^3.10.5",
+		"sql-formatter": "^15.4.8"
 	}
 }

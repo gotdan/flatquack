@@ -7,6 +7,7 @@ import {parseArgs} from "util";
 import {templateToQuery} from "./query-builder.js";
 import fhirSchema from "../schemas/fhir-schema-r4.json";
 import duckdb from "duckdb";
+import {format} from "sql-formatter";
 
 // Read package.json for version info
 const packageJsonPath = path.join(import.meta.dir, "../package.json");
@@ -133,6 +134,20 @@ function loadMacros(macroLocations) {
 	return macroContents.join('\n');
 }
 
+function formatSQL(sql) {
+	try {
+		return format(sql, {
+			language: 'duckdb',
+			linesBetweenQueries: 0
+		});
+	} catch (error) {
+		// If formatting fails, return the original SQL
+		if (args.values["verbose"]) {
+			console.warn("Warning: SQL formatting failed, using unformatted SQL:", error.message);
+		}
+		return sql;
+	}
+}
 
 const args = parseArgs({
 	args: Bun.argv.slice(2),
@@ -199,18 +214,19 @@ for (const file of glob.scanSync(args.values["view-path"],{onlyFiles:true})) {
 
 	const view = JSON.parse(fs.readFileSync(inputPath));
 	const query = templateToQuery(view, schema, template, params, args.values["verbose"], undefined, customMacros, vars);
+	const formattedQuery = formatSQL(query);
 
 	if (args.values["mode"] == "build") {
 		console.log("*** compiling", inputPath, "=>", outputPath, "***");
-		fs.writeFileSync(outputPath, query);
+		fs.writeFileSync(outputPath, formattedQuery);
 	} else if (args.values["mode"] == "run") {
 		console.log("*** running", inputPath, "***");
-		runQuery(query);
+		runQuery(formattedQuery);
 	} else if (args.values["mode"] == "explore") {
 		console.log("*** exploring", inputPath, "***");
-		exploreQuery(query);
+		exploreQuery(formattedQuery);
 	} else { //preview mode
 		console.log("*** compiling", inputPath, "***");
-		console.log(query)
+		console.log(formattedQuery)
 	}
 }
