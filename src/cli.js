@@ -8,6 +8,53 @@ import {templateToQuery} from "./query-builder.js";
 import fhirSchema from "../schemas/fhir-schema-r4.json";
 import duckdb from "duckdb";
 
+// Read package.json for version info
+const packageJsonPath = path.join(import.meta.dir, "../package.json");
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+
+function showHelp() {
+	console.log(`
+flatquack v${packageJson.version} - FHIR flattening and query generation tool
+${packageJson.homepage}
+
+Usage: bunx flatquack [options] (or bun run ./src/cli.js [options] for dev use)
+
+Options:
+  -m, --mode <mode>             Execution mode: preview|build|run|explore (default: preview)
+  -t, --template <path>         Template file path or @template-name (default: @csv)
+  -v, --view-path <path>        Path to search for view definition files (default: ".")
+  -p, --view-pattern <pattern>  Glob pattern for view definition files (default: "**/*.vd.json")
+  -s, --schema-file <path>      Custom schema file path (default: built-in FHIR R4 schema)
+      --macros <path>           Custom macro file or directory (can be repeated)
+      --var <name=value>        Values for FHIRPath constants in ViewDefinition (can be repeated)
+      --param <name=value>      Template parameters (can be used repeated)
+      --verbose                 Enable verbose output
+      --help                    Show this help message
+      --version                 Show version information
+
+Modes:
+  preview   Display the generated SQL query (default)
+  build     Write the generated SQL to .sql files
+  run       Execute the generated SQL query
+  explore   Execute and display first 10 query results
+
+Commonly used built-in Templates:
+  @csv          Export flattened data to CSV format (default)
+  @parquet      Export flattened data to Parquet format
+  @dbt_model    Generate a dbt model (reads from dbt source instead of files)
+
+Examples:
+  bunx flatquack
+  bunx flatquack --mode build --template @parquet
+`);
+	process.exit(0);
+}
+
+function showVersion() {
+	console.log(`flatquack v${packageJson.version}`);
+	process.exit(0);
+}
+
 function runQuery(sql) {
 	const db = new duckdb.Database(":memory:");
 	const startTime = performance.now()
@@ -92,7 +139,7 @@ const args = parseArgs({
 	options: {
 		"view-path": {
 			type: "string", default: ".", 
-			required: true, short: "v"
+			short: "v"
 		},
 		"view-pattern": {
 			type: "string", default: "**/*.vd.json", 
@@ -104,9 +151,20 @@ const args = parseArgs({
 		"verbose": {type: "boolean"},
 		"mode": {type: "string", short: "m", default: "preview"},
 		"param": {type: "string", multiple: true},
-		"var": {type: "string", multiple: true}
+		"var": {type: "string", multiple: true},
+		"help": {type: "boolean"},
+		"version": {type: "boolean"}
 	}
 });
+
+// Handle help and version flags
+if (args.values["help"]) {
+	showHelp();
+}
+
+if (args.values["version"]) {
+	showVersion();
+}
 
 let templatePath = path.join(import.meta.dir, "../templates/csv.sql");
 if (args.values["template"] && args.values["template"][0] == "@") {
